@@ -661,8 +661,10 @@ def plot_kl_apex_vs_unsloth(models, output_dir):
         "APEX I-Balanced (23.6 GB)",
         "APEX I-Compact (16.1 GB)",
         "APEX Mini (12.2 GB)",
+        "Unsloth UD-Q4_K_XL (20.7 GB)",
         "Unsloth Q8_K_XL (45.3 GB)",
         "Unsloth Q4_K_L (18.8 GB)",
+        "Q5_K_S (23.1 GB)",
         "Q8_0 (34.4 GB)",
     ]
 
@@ -672,8 +674,10 @@ def plot_kl_apex_vs_unsloth(models, output_dir):
         "APEX I-Balanced (23.6 GB)":    "#388E3C",
         "APEX I-Compact (16.1 GB)":     "#388E3C",
         "APEX Mini (12.2 GB)":          "#388E3C",
+        "Unsloth UD-Q4_K_XL (20.7 GB)":"#F57C00",
         "Unsloth Q8_K_XL (45.3 GB)":   "#F57C00",
         "Unsloth Q4_K_L (18.8 GB)":    "#F57C00",
+        "Q5_K_S (23.1 GB)":            "#D32F2F",
         "Q8_0 (34.4 GB)":              "#D32F2F",
     }
 
