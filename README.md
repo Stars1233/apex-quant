@@ -4,6 +4,7 @@
 
 [![Paper](https://img.shields.io/badge/Technical_Report-PDF-blue)](paper/APEX_Technical_Report.pdf)
 [![Models](https://img.shields.io/badge/HuggingFace-Models-yellow)](https://huggingface.co/mudler/Qwen3.5-35B-A3B-APEX-GGUF)
+[![Coder](https://img.shields.io/badge/HuggingFace-Coder_30B-yellow)](https://huggingface.co/mudler/Qwen3-Coder-30B-APEX-GGUF)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![LocalAI](https://img.shields.io/badge/LocalAI-Run_Locally-orange)](https://github.com/mudler/LocalAI)
 
@@ -54,6 +55,28 @@ All measurements on Qwen3.5-35B-A3B, NVIDIA DGX Spark (GB10, 122 GB VRAM). Perpl
 ![KL Divergence Comparison](plots/kl_comparison.png)
 
 ![APEX vs Unsloth KL Divergence](plots/kl_apex_vs_unsloth.png)
+
+### Qwen3-Coder-30B-A3B Results
+
+Same architecture (MoE, 40 layers), same APEX profiles. I-variants use diverse imatrix calibration. Benchmarks on NVIDIA DGX Spark.
+
+| Configuration | Size (GB) | Perplexity | KL mean | KL max | HS | WG | MMLU | ARC | TQA | tg128 (t/s) |
+|---------------|-----------|-----------|---------|--------|------|------|------|------|------|-------------|
+| Q8_0 | 30.3 | 9.537 | 0.0031 | 2.56 | 75.8% | 68.0% | 39.6% | 45.8% | 30.0% | 57.1 |
+| **APEX I-Balanced** | **20.8** | **9.516** | **0.0074** | **21.04** | **76.5%** | **68.3%** | **40.2%** | **46.2%** | **30.4%** | **68.5** |
+| **APEX I-Quality** | **18.1** | **9.535** | **0.0108** | **16.38** | **75.3%** | **68.5%** | **39.8%** | **44.8%** | **30.5%** | **74.1** |
+| **APEX Quality** | **18.1** | **9.560** | **0.0117** | **5.37** | **75.5%** | **68.0%** | **40.1%** | **44.5%** | **31.8%** | **73.7** |
+| **APEX Balanced** | **20.5** | **9.563** | **0.0083** | **21.35** | **75.5%** | **68.5%** | **39.6%** | **45.2%** | **30.5%** | **68.1** |
+| Unsloth Q5_K_S | 19.6 | 9.513 | 0.0119 | 4.18 | 75.3% | 68.5% | 39.8% | 45.2% | 30.2% | 72.2 |
+| Unsloth UD-Q4_K_XL | 16.5 | 9.676 | 0.0246 | 21.37 | 76.3% | 67.0% | 39.7% | 47.5% | 30.5% | 82.3 |
+| **APEX I-Compact** | **13.8** | **9.667** | **0.0418** | **23.49** | **76.3%** | **68.8%** | **39.0%** | **44.1%** | **29.0%** | **84.5** |
+| **APEX Compact** | **13.8** | **9.765** | **0.0492** | **20.47** | **75.0%** | **67.0%** | **39.1%** | **45.8%** | **30.4%** | **83.8** |
+| **APEX Mini** | **11.3** | **9.838** | **0.0862** | **21.53** | **73.5%** | **68.8%** | **39.0%** | **44.1%** | **31.0%** | **91.4** |
+
+**Highlights:**
+- **APEX I-Balanced beats Q8_0** in PPL (9.516 vs 9.537), HellaSwag (76.5% vs 75.8%), MMLU (40.2% vs 39.6%), and ARC (46.2% vs 45.8%) while being **31% smaller** and **20% faster**.
+- **APEX I-Compact matches UD-Q4_K_XL** quality at 16% less size (13.8 vs 16.5 GB) with higher Winogrande (68.8% vs 67.0%).
+- **APEX Mini (11.3 GB)** delivers 91.4 t/s -- fastest of any configuration -- while maintaining viable quality.
 
 ### Key Takeaways
 
