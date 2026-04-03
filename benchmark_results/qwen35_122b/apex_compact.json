@@ -1,0 +1,12 @@
+{
+  "model": "apex_compact",
+  "size_gb": 55.1,
+  "perplexity": 5.0460,
+  "kl_mean": 0.048705,
+  "hellaswag": 84.50000000,
+  "winogrande": 77.7500,
+  "mmlu": 43.5401,
+  "arc_challenge": 56.1873,
+  "pp512_ts": 2289.11,
+  "tg128_ts": 106.19
+}

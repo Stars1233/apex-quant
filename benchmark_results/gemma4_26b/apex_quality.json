@@ -1,0 +1,17 @@
+{
+  "model": "apex_quality",
+  "size_gb": 19.1,
+  "perplexity": 343.5380,
+  "ppl_error": 5.55814,
+  "kl_mean": null,
+  "kl_max": null,
+  "kl_99_9": null,
+  "kl_median": null,
+  "hellaswag": 41.00000000,
+  "winogrande": 50.0000,
+  "mmlu": 26.2274,
+  "arc_challenge": 27.0903,
+  "truthfulqa": 24.2350,
+  "pp512_ts": 7252.15,
+  "tg128_ts": 175.30
+}

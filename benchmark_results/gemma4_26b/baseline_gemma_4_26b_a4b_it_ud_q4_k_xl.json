@@ -1,0 +1,17 @@
+{
+  "model": "baseline_gemma_4_26b_a4b_it_ud_q4_k_xl",
+  "size_gb": 15.9,
+  "perplexity": 355.5641,
+  "ppl_error": 5.77316,
+  "kl_mean": null,
+  "kl_max": null,
+  "kl_99_9": null,
+  "kl_median": null,
+  "hellaswag": 39.00000000,
+  "winogrande": 48.5000,
+  "mmlu": 24.8708,
+  "arc_challenge": 26.7559,
+  "truthfulqa": 25.5814,
+  "pp512_ts": 8245.53,
+  "tg128_ts": 169.68
+}

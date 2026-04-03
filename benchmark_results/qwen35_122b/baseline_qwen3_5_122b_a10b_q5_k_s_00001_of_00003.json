@@ -1,0 +1,17 @@
+{
+  "model": "baseline_qwen3_5_122b_a10b_q5_k_s_00001_of_00003",
+  "size_gb": 81.0,
+  "perplexity": 4.8258,
+  "ppl_error": 0.02844,
+  "kl_mean": 0.006534,
+  "kl_max": 1.218714,
+  "kl_99_9": 0.24562,
+  "kl_median": 0.00204,
+  "hellaswag": 85.25,
+  "winogrande": 76.0,
+  "mmlu": 43.7985,
+  "arc_challenge": 57.8595,
+  "truthfulqa": null,
+  "pp512_ts": 2573.56,
+  "tg128_ts": 90.37
+}
