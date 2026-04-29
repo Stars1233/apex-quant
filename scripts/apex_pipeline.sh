@@ -116,7 +116,11 @@ YAML_EVAL_SUITE=$(parse_yaml "$CONFIG_FILE" "eval_suite")
 
 # Harness tasks (configurable per model)
 HARNESS_TASKS=$(parse_yaml "$CONFIG_FILE" "harness_tasks")
-[ -z "$HARNESS_TASKS" ] && HARNESS_TASKS="humaneval,mbpp,ifeval,mmlu,arc_challenge,truthfulqa_mc2"
+[ -z "$HARNESS_TASKS" ] && HARNESS_TASKS="humaneval_instruct,mbpp_instruct,ifeval,gsm8k_cot_zeroshot,minerva_math,mmlu_pro"
+
+# NGL: CLI env > YAML > default 99
+YAML_NGL=$(parse_yaml "$CONFIG_FILE" "ngl")
+[ -n "$YAML_NGL" ] && [ "$NGL" = "99" ] && NGL="$YAML_NGL"
 
 # Native eval tasks (configurable per model)
 # When eval_suite=all (default), accuracy benchmarks run via harness, not native
@@ -353,7 +357,7 @@ run_harness_eval() {
 
     info "Harness eval: $name (tasks: $HARNESS_TASKS)"
     info "  Starting llama-server on port $PORT..."
-    $SERVER -m "$model" -c 8192 -ngl $NGL --port $PORT --n-predict 1024 --log-disable > /dev/null 2>&1 &
+    $SERVER -m "$model" -c 16384 -ngl $NGL --port $PORT --n-predict 2048 --reasoning off --log-disable > /dev/null 2>&1 &
     local srv_pid=$!
 
     # Wait for server
@@ -373,33 +377,66 @@ run_harness_eval() {
     local tok_arg=""
     [ -n "$TOKENIZER" ] && tok_arg=",tokenizer_backend=huggingface,tokenizer=${TOKENIZER}"
 
-    info "  Running lm_eval: $HARNESS_TASKS"
+    # Split tasks into generation vs loglikelihood
+    local GEN_KNOWN="humaneval humaneval_instruct mbpp mbpp_instruct ifeval gsm8k_cot_zeroshot minerva_math mmlu_pro"
+    local gen_run="" ll_run=""
+    IFS="," read -ra TASK_ARR <<< "$HARNESS_TASKS"
+    for t in "${TASK_ARR[@]}"; do
+        t=$(echo "$t" | xargs)
+        if echo "$GEN_KNOWN" | grep -qw "$t"; then
+            [ -n "$gen_run" ] && gen_run="${gen_run},"
+            gen_run="${gen_run}${t}"
+        else
+            [ -n "$ll_run" ] && ll_run="${ll_run},"
+            ll_run="${ll_run}${t}"
+        fi
+    done
+
     local harness_dir=$(mktemp -d)
-    lm_eval \
-        --model local-completions \
-        --model_args "model=${name},base_url=http://localhost:${PORT}/v1/completions${tok_arg}" \
-        --tasks "$HARNESS_TASKS" \
-        --batch_size 1 \
-        --output_path "$harness_dir" \
-        2>&1 | tail -30
+    mkdir -p "$harness_dir/gen" "$harness_dir/ll"
+
+    # Pass 1: Generation tasks (local-chat-completions)
+    if [ -n "$gen_run" ]; then
+        info "  Pass 1: Generation tasks ($gen_run)"
+        lm_eval \
+            --model local-chat-completions \
+            --model_args "model=${name},base_url=http://localhost:${PORT}/v1/chat/completions${tok_arg}" \
+            --tasks "$gen_run" \
+            --batch_size 1 \
+            --confirm_run_unsafe_code --log_samples --apply_chat_template \
+            --output_path "$harness_dir/gen" \
+            2>&1 | tail -30
+    fi
+
+    # Pass 2: Loglikelihood tasks (local-completions, requires patched lm_eval)
+    if [ -n "$ll_run" ]; then
+        info "  Pass 2: Loglikelihood tasks ($ll_run)"
+        lm_eval \
+            --model local-completions \
+            --model_args "model=${name},base_url=http://localhost:${PORT}/v1/completions${tok_arg}" \
+            --tasks "$ll_run" \
+            --batch_size 1 \
+            --output_path "$harness_dir/ll" \
+            2>&1 | tail -30
+    fi
 
     kill "$srv_pid" 2>/dev/null; wait "$srv_pid" 2>/dev/null || true
     info "  Server stopped"
 
     # Parse harness results into JSON
-    local result_file=$(find "$harness_dir" -name "results.json" -type f 2>/dev/null | head -1)
+    local result_file=$(find "$harness_dir" -name "results*.json" -type f 2>/dev/null | head -1)
     if [ -n "$result_file" ] && [ -f "$result_file" ]; then
         python3 << PYEOF
-import json, os
-with open("$result_file") as f:
-    data = json.load(f)
-results = data.get("results", {})
+import json, os, glob
 output = {"model": "$name", "eval_harness": {}}
-for task, metrics in results.items():
-    clean = {k: round(v, 4) if isinstance(v, float) else v
-             for k, v in metrics.items() if not k.startswith("alias") and isinstance(v, (int, float))}
-    if clean:
-        output["eval_harness"][task] = clean
+for rf in glob.glob(os.path.join("$harness_dir", "**", "results*.json"), recursive=True):
+    with open(rf) as f:
+        data = json.load(f)
+    for task, metrics in data.get("results", {}).items():
+        clean = {k: round(v, 4) if isinstance(v, float) else v
+                 for k, v in metrics.items() if not k.startswith("alias") and isinstance(v, (int, float))}
+        if clean:
+            output["eval_harness"][task] = clean
 with open("$outfile", "w") as f:
     json.dump(output, f, indent=2)
 print("  → $outfile")
@@ -467,15 +504,26 @@ if should_run download; then
     if [ -n "$SOURCE_GGUF" ]; then
         info "Source is pre-converted GGUF: $SOURCE_GGUF"
         mkdir -p "${MODEL_DIR}/source"
-        # Only download BF16 files (not the entire repo with all quant variants)
+        # Download BF16 files — try BF16/ subdir first (Unsloth), then root-level *BF16* (milkowski)
         hf download "$SOURCE_GGUF" --include "BF16/*" --local-dir "${MODEL_DIR}/source" 2>&1 | tail -5
+        if ! find "${MODEL_DIR}/source" -name "*BF16*" -o -name "*bf16*" 2>/dev/null | grep -q .; then
+            info "No BF16/ subdir found, trying root-level BF16 pattern..."
+            hf download "$SOURCE_GGUF" --include "*BF16*" --local-dir "${MODEL_DIR}/source" 2>&1 | tail -5
+        fi
     else
         info "Downloading safetensors: $MODEL_ID"
         mkdir -p "${MODEL_DIR}/safetensors"
         hf download "$MODEL_ID" --local-dir "${MODEL_DIR}/safetensors" 2>&1 | tail -5
     fi
 
-    if [ ${#BASELINES[@]} -gt 0 ]; then
+    # Skip baseline downloads if baseline/eval_baselines phases are skipped
+    skip_bl=false
+    if [ -n "$SKIP_PHASES" ]; then
+        echo "$SKIP_PHASES" | tr ',' '\n' | grep -q "^baseline$" && skip_bl=true
+        echo "$SKIP_PHASES" | tr ',' '\n' | grep -q "^eval_baselines$" && skip_bl=true
+    fi
+
+    if [ ${#BASELINES[@]} -gt 0 ] && [ "$skip_bl" = false ]; then
         info "Downloading ${#BASELINES[@]} baselines..."
         mkdir -p "${MODEL_DIR}/baselines"
         for baseline in "${BASELINES[@]}"; do
@@ -581,7 +629,13 @@ if should_run ivariants; then
 
     declare -A I_BASE_TYPES=([i-quality]=Q6_K [i-balanced]=Q5_K [i-compact]=Q4_K [i-mini]=Q3_K [i-nano]=iq2_xxs [i-micro]=iq1_m)
 
+    # SKIP_TIERS env var: comma-separated tier names to skip (e.g. "micro" or "nano,micro")
+    # Matches both "micro" and "i-micro" forms.
     for profile in "${I_PROFILES[@]}" i-mini i-nano i-micro; do
+        if [[ -n "${SKIP_TIERS:-}" ]] && [[ ",${SKIP_TIERS}," == *",${profile#i-},"* || ",${SKIP_TIERS}," == *",${profile},"* ]]; then
+            info "Skipping ${profile} (SKIP_TIERS)"
+            continue
+        fi
         config_name="${profile#i-}"
         cap="I-$(echo ${config_name:0:1} | tr a-z A-Z)${config_name:1}"
         outfile="${MODEL_DIR}/${MODEL_NAME}-APEX-${cap}.gguf"
@@ -657,6 +711,14 @@ print('Repo ready: ${HF_REPO}')
         [ -f "$gguf" ] || continue
         upload_file "$gguf"
     done
+
+    # Upload F16/BF16 source GGUF if it was converted from safetensors
+    if [ "$SOURCE_FORMAT" = "safetensors" ] && [ -f "${MODEL_DIR}/f16.gguf" ]; then
+        f16_name="${MODEL_NAME}-F16.gguf"
+        cp "${MODEL_DIR}/f16.gguf" "${MODEL_DIR}/${f16_name}" 2>/dev/null || ln -sf "${MODEL_DIR}/f16.gguf" "${MODEL_DIR}/${f16_name}"
+        upload_file "${MODEL_DIR}/${f16_name}"
+        rm -f "${MODEL_DIR}/${f16_name}"
+    fi
 
     # Upload mmproj if configured (vision models)
     if [ -n "$MMPROJ" ]; then
