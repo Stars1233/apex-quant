@@ -143,6 +143,10 @@ mapfile -t BASELINES < <(parse_yaml_list "$CONFIG_FILE" "baselines")
 PROFILES=(quality balanced compact)
 I_PROFILES=(i-quality i-balanced i-compact)
 
+# APEX_VARIANT env var (optional): infixed after "-APEX" in output filenames.
+# e.g. APEX_VARIANT=MTP → Foo-APEX-MTP-I-Balanced.gguf. Leave empty for default.
+APEX_VARIANT_SUFFIX="${APEX_VARIANT:+-${APEX_VARIANT}}"
+
 echo "═══════════════════════════════════════════════════════════"
 echo "  APEX Pipeline: ${MODEL_NAME}"
 echo "  Model: ${MODEL_ID}"
@@ -594,7 +598,7 @@ if should_run quantize; then
 
     for profile in "${PROFILES[@]}"; do
         cap="$(echo ${profile:0:1} | tr a-z A-Z)${profile:1}"
-        outfile="${MODEL_DIR}/${MODEL_NAME}-APEX-${cap}.gguf"
+        outfile="${MODEL_DIR}/${MODEL_NAME}-APEX${APEX_VARIANT_SUFFIX}-${cap}.gguf"
         config="${CONFIGS_DIR}/${CONFIG_PREFIX}_${profile}.txt"
         base="${BASE_TYPES[$profile]}"
 
@@ -638,7 +642,7 @@ if should_run ivariants; then
         fi
         config_name="${profile#i-}"
         cap="I-$(echo ${config_name:0:1} | tr a-z A-Z)${config_name:1}"
-        outfile="${MODEL_DIR}/${MODEL_NAME}-APEX-${cap}.gguf"
+        outfile="${MODEL_DIR}/${MODEL_NAME}-APEX${APEX_VARIANT_SUFFIX}-${cap}.gguf"
         config="${CONFIGS_DIR}/${CONFIG_PREFIX}_${config_name}.txt"
         base="${I_BASE_TYPES[$profile]}"
 
@@ -656,7 +660,7 @@ if should_run eval; then
     log "Phase 8: Evaluating APEX quants"
     REF_LOGITS="${MODEL_DIR}/reference-logits.bin"
 
-    for gguf in "${MODEL_DIR}/${MODEL_NAME}-APEX-"*.gguf; do
+    for gguf in "${MODEL_DIR}/${MODEL_NAME}-APEX${APEX_VARIANT_SUFFIX}-"*.gguf; do
         [ -f "$gguf" ] || continue
         fname=$(basename "$gguf" .gguf)
         name=$(echo "$fname" | sed "s/${MODEL_NAME}-//" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
@@ -707,7 +711,7 @@ from huggingface_hub import create_repo
 create_repo('${HF_REPO}', repo_type='model', exist_ok=True)
 print('Repo ready: ${HF_REPO}')
 "
-    for gguf in "${MODEL_DIR}/${MODEL_NAME}-APEX-"*.gguf; do
+    for gguf in "${MODEL_DIR}/${MODEL_NAME}-APEX${APEX_VARIANT_SUFFIX}-"*.gguf; do
         [ -f "$gguf" ] || continue
         upload_file "$gguf"
     done
